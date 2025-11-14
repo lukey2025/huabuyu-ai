@@ -350,115 +350,92 @@
                 <button class="btn-secondary mt-6" onclick="resetForm()">重新分析</button>
             </div>
         </div>
-
+        
     </div>
 
     <script>
         const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/5f95xre7wr10n1cntvi58um8urh5ermm";
         let timerInterval;
         
-        // 增强的Markdown解析器
+        // 简化的Markdown解析器
         function parseMarkdown(text) {
-            // 移除JSON结构符号和转义字符
-            text = text.replace(/^"|"$/g, '')
-                      .replace(/,$/g, '')
-                      .replace(/^'|'$/g, '')
-                      .replace(/\\"/g, '"')
-                      .replace(/\\'/g, "'")
-                      .replace(/\\n/g, '\n')
-                      .replace(/\\t/g, '\t')
-                      .replace(/\\r/g, '\r');
-            
-            // 处理标题
-            text = text.replace(/^# (.*$)/gm, '<h1>$1</h1>');
-            text = text.replace(/^## (.*$)/gm, '<h2>$1</h2>');
-            text = text.replace(/^### (.*$)/gm, '<h3>$1</h3>');
-            
-            // 处理无序列表
-            text = text.replace(/^\- (.*$)/gm, '<li>$1</li>');
-            text = text.replace(/(<li>.*<\/li>)/gs, function(match) {
-                // 检查是否已经被包裹在ul中
-                if (!/<ul>/.test(match)) {
-                    return '<ul>' + match + '</ul>';
-                }
-                return match;
-            });
-            
-            // 处理有序列表
-            text = text.replace(/^\d+\. (.*$)/gm, '<li>$1</li>');
-            text = text.replace(/(<li>.*<\/li>)/gs, function(match) {
-                // 检查是否已经被包裹在ul或ol中
-                if (!/<ul>/.test(match) && !/<ol>/.test(match)) {
-                    return '<ol>' + match + '</ol>';
-                }
-                return match;
-            });
+            if (!text) return "";
             
             // 处理粗体
             text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-            text = text.replace(/__(.*?)__/g, '<strong>$1</strong>');
             
             // 处理斜体
             text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-            text = text.replace(/_(.*?)_/g, '<em>$1</em>');
             
             // 处理代码
             text = text.replace(/`(.*?)`/g, '<code>$1</code>');
             
-            // 处理代码块
-            text = text.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+            // 处理换行 - 将换行符转换为<br>
+            text = text.replace(/\n/g, '<br>');
             
-            // 处理引用
-            text = text.replace(/^> (.*$)/gm, '<blockquote>$1</blockquote>');
+            // 处理列表项
+            text = text.replace(/^\s*[-*]\s+(.*)/gm, '<li>$1</li>');
+            text = text.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
             
-            // 处理段落（确保在标题、列表等之后添加段落）
-            text = text.replace(/^(?!<h[1-6]>|<ul>|<ol>|<li>|<blockquote>|<pre>|<p>)(.*$)/gm, function(match) {
-                // 检查是否已经是HTML标签
-                if (!/<[a-z][\s\S]*>/i.test(match)) {
-                    return '<p>' + match + '</p>';
-                }
-                return match;
-            });
-            
-            // 修复多余的换行
-            text = text.replace(/\n{3,}/g, '\n\n');
+            // 处理数字列表
+            text = text.replace(/^\s*\d+\.\s+(.*)/gm, '<li>$1</li>');
+            text = text.replace(/(<li>.*<\/li>)/s, '<ol>$1</ol>');
             
             return text;
         }
         
         // 提取并处理analysis对象
         function extractAndProcessAnalysis(data) {
-            // 过滤HTTP响应头信息，提取JSON内容
-            let jsonContent = data;
-            
-            // 检查是否包含HTTP响应头信息
-            if (data.startsWith('Status:') || data.includes('Headers:')) {
-                // 尝试从响应中提取JSON部分
-                const jsonMatch = data.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    jsonContent = jsonMatch[0];
-                }
-            }
+            console.log("原始响应:", data);
             
             try {
-                // 尝试解析JSON
-                const parsedData = JSON.parse(jsonContent);
+                // 尝试直接解析JSON
+                let parsedData;
+                if (typeof data === 'string') {
+                    parsedData = JSON.parse(data);
+                } else {
+                    parsedData = data;
+                }
                 
-                // 提取analysis对象
-                const analysis = parsedData.analysis || {};
+                // 查找analysis对象
+                let analysis = parsedData.analysis || parsedData;
                 
+                // 返回处理后的数据
                 return {
-                    problemDiagnosis: analysis.problem_diagnosis || "品牌在AI搜索中缺乏足够的权威引用和内容覆盖。",
-                    optimizationSuggestions: analysis.optimization_suggestions || "1. 创建专业内容页面 2. 优化官网元标签 3. 建立品牌提及",
-                    effectPrediction: analysis.effect_prediction || "预计优化后，AI搜索可见度可显著提升。"
+                    problemDiagnosis: analysis.problem_diagnosis || analysis.problemDiagnosis || "品牌在AI搜索中缺乏足够的权威引用和内容覆盖。",
+                    optimizationSuggestions: analysis.optimization_suggestions || analysis.optimizationSuggestions || "1. 创建专业内容页面 2. 优化官网元标签 3. 建立品牌提及",
+                    effectPrediction: analysis.effect_prediction || analysis.effectPrediction || "预计优化后，AI搜索可见度可显著提升。"
                 };
             } catch (e) {
-                // 如果解析失败，返回默认值
-                console.error("解析JSON失败:", e);
+                console.error("解析失败:", e);
+                
+                // 如果解析失败，尝试从文本中提取关键信息
+                let problemDiagnosis = "品牌在AI搜索中缺乏足够的权威引用和内容覆盖。";
+                let optimizationSuggestions = "1. 创建专业内容页面 2. 优化官网元标签 3. 建立品牌提及";
+                let effectPrediction = "预计优化后，AI搜索可见度可显著提升。";
+                
+                // 尝试从文本中查找关键字段
+                if (typeof data === 'string') {
+                    if (data.includes('problem_diagnosis')) {
+                        const match = data.match(/"problem_diagnosis":\s*"([^"]*)"/);
+                        if (match) problemDiagnosis = match[1];
+                    }
+                    
+                    if (data.includes('optimization_suggestions')) {
+                        const match = data.match(/"optimization_suggestions":\s*"([^"]*)"/);
+                        if (match) optimizationSuggestions = match[1];
+                    }
+                    
+                    if (data.includes('effect_prediction')) {
+                        const match = data.match(/"effect_prediction":\s*"([^"]*)"/);
+                        if (match) effectPrediction = match[1];
+                    }
+                }
+                
                 return {
-                    problemDiagnosis: "品牌在AI搜索中缺乏足够的权威引用和内容覆盖。",
-                    optimizationSuggestions: "1. 创建专业内容页面 2. 优化官网元标签 3. 建立品牌提及",
-                    effectPrediction: "预计优化后，AI搜索可见度可显著提升。"
+                    problemDiagnosis,
+                    optimizationSuggestions,
+                    effectPrediction
                 };
             }
         }
@@ -506,12 +483,15 @@
                 
                 // 处理响应
                 return response.text().then(text => {
+                    console.log("Webhook响应:", text);
+                    
                     // 显示成功消息
                     successElement.textContent = "分析成功完成";
                     successElement.style.display = "block";
                     
                     // 提取并处理analysis对象
                     const analysis = extractAndProcessAnalysis(text);
+                    console.log("解析后的分析数据:", analysis);
                     
                     // 切换到结果展示
                     document.getElementById('formSection').style.display = "none";
@@ -524,6 +504,7 @@
                     
                     analyzeBtn.classList.remove('animate-pulse');
                     analyzeBtn.disabled = false;
+                    analyzeBtn.textContent = "开始分析";
                 });
             })
             .catch(error => {
@@ -531,7 +512,8 @@
                 clearInterval(timerInterval);
                 analyzeBtn.classList.remove('animate-pulse');
                 
-                errorElement.textContent = "分析失败: " + error.message;
+                console.error("请求失败:", error);
+                errorElement.textContent = "分析失败: " + error.message + "。请检查网络连接或稍后重试。";
                 errorElement.style.display = "block";
                 analyzeBtn.disabled = false;
                 analyzeBtn.textContent = "开始分析";
